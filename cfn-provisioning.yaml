@@ -68,8 +68,18 @@ Parameters:
   ManagementPublicIP:
     Description: Your Public IP Address (xx.xx.xx.xx/xx)
     Type: String
-    Default: '49.228.224.175/32'
+    Default: '49.228.0.0/16'
   
+  ### CodeDeploy Parameters ###
+  CodeDeployConfigName:
+    Description: CodeDeploy Configuration Name
+    Type: String
+    Default: CodeDeployDefault.OneAtATime
+    AllowedValues:
+      - CodeDeployDefault.OneAtATime
+      - CodeDeployDefault.HalfAtATime
+      - CodeDeployDefault.AllAtATime
+    
 Resources:
   ### Creating Jenkins VPC ###
   VPC:
@@ -341,6 +351,7 @@ Resources:
       LaunchTemplateData:
         ImageId: !Ref LatestAmiId
         InstanceType: !Ref InstanceType
+        IamInstanceProfile: !Ref TesterInstanceProfile
         SecurityGroupIds:
           - !GetAtt TesterSecurityGroup.GroupId
         UserData:
@@ -381,7 +392,155 @@ Resources:
       - TesterTargetGroup
       - TesterLaunchTemplate
 
+  ### Creating IAM role for Tester server used by CodeDeploy ###
+  TesterEc2CodeDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: '/'
+      RoleName: !Sub '${AWS::StackName}-CodeDeploy-role-for-EC2'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: !Sub '${AWS::StackName}-CodeDeploy-policy-for-EC2'
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action: 
+            - s3:GetObject
+            - s3:GetObjectVersion
+            - s3:ListBucket
+            Resource: !Sub 'arn:aws:s3:::${S3CodeBuildBucket}/*'
 
+  TesterInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: '/'
+      Roles:
+       - !Ref TesterEc2CodeDeployRole
+
+  ### Creating CodeBuildProject ###
+  CodeBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: '/'
+      RoleName: !Sub '${AWS::StackName}-CodeBuild-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - codebuild.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: !Sub '${AWS::StackName}-CodeBuild-policy'
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action: 
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            - s3:PutObject
+            - s3:GetObject
+            - s3:GetObjectVersion
+            Resource: !Sub 'arn:aws:s3:::${S3CodeBuildBucket}/*'
+
+  ### Creating S3 Bucket for storing CodeBuild artifacts ###
+  S3CodeBuildBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'codebuild-${AWS::AccountId}-${AWS::Region}'
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  ### Creating CodeBuild Project ###
+  CodeBuild:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub '${AWS::StackName}-build'
+      ServiceRole: !GetAtt CodeBuildRole.Arn
+      Artifacts:
+        Type: S3
+        EncryptionDisabled: True
+        Packaging: ZIP
+        Name: 'codebuild-artifact.zip'
+        Location: !Ref S3CodeBuildBucket
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: 'aws/codebuild/standard:4.0'
+      Source:
+        Type: S3
+        Location: !Sub '${S3CodeBuildBucket}/src'
+      TimeoutInMinutes: 10
+    DependsOn:
+      - S3CodeBuildBucket
+      - CodeBuildRole
+
+  ### Creating CodeDeploy Application
+  CodeDeployApplication:
+    Type: AWS::CodeDeploy::Application
+    Properties:
+      ApplicationName: !Sub '${AWS::StackName}-app'
+      ComputePlatform: Server
+  
+  ### Creating CodeDeploy DeploymentGroup
+  CodeDeploy:
+    Type: AWS::CodeDeploy::DeploymentGroup
+    Properties:
+      ApplicationName: !Ref CodeDeployApplication
+      DeploymentGroupName: !Sub ${CodeDeployApplication}-deployment-group
+      AutoScalingGroups:
+        - !Ref TesterAsg
+      ServiceRoleArn: !GetAtt CodeDeployRole.Arn
+      DeploymentConfigName: !Ref CodeDeployConfigName
+      # Deployment:
+      #   Revision:
+      #     RevisionType: S3
+      #     S3Location:
+      #       Bucket: !Ref S3CodeBuildBucket
+      #       BundleType: zip
+      #       Key: 'codebuild-artifact.zip'
+
+    DependsOn:
+      - TesterAsg
+      - CodeDeployRole
+      - S3CodeBuildBucket
+
+  ### Creating IAM Role for CodeDeploy ###
+  CodeDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: '/'
+      RoleName: !Sub '${AWS::StackName}-CodeDeploy-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - codedeploy.amazonaws.com
+          Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole'
+
+##################
+# Output Section #
+##################
 Outputs:
   JenkinsPublicDNS:
     Description: 'Jenkins Public IP Address'
@@ -390,3 +549,19 @@ Outputs:
   TesterAlbDns:
     Description: 'Tester ALB DNS'
     Value: !GetAtt TesterAlb.DNSName
+
+  CodeBuildProjectName:
+    Description: 'CodeBuild Project Name used for input in Jenkins project configuration'
+    Value: !Ref CodeBuild
+
+  CodeDeployApplicationName:
+    Description: 'CodeDeploy Application Name used for input in Jenkins project configuration'
+    Value: !Ref CodeDeployApplication
+
+  CodeDeployDeploymentGroup:
+    Description: 'CodeDeploy Deployment Group used for input in Jenkins project configuration'
+    Value: !Ref CodeDeploy
+
+  CodeDeployDeploymentConfig:
+    Description: 'CodeDeploy Deployment Config used for input in Jenkins project configuration'
+    Value: !Ref CodeDeployConfigName
