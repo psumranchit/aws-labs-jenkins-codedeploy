@@ -351,7 +351,7 @@ Resources:
       LaunchTemplateData:
         ImageId: !Ref LatestAmiId
         InstanceType: !Ref InstanceType
-        IamInstanceProfile: !GetAtt TesterInstanceProfile.Arn
+        IamInstanceProfile: !Sub 'arn:aws:iam::${AWS::AccountId}:instanceprofile/${TesterInstanceProfile}'
         SecurityGroupIds:
           - !GetAtt TesterSecurityGroup.GroupId
         UserData:
@@ -364,6 +364,7 @@ Resources:
               systemctl enable httpd
               EC2_AVAIL_ZONE=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone)
               echo "<h1>Hello World from $(hostname -f) in AZ $EC2_AVAIL_ZONE </h1>" > /var/www/html/index.html
+    DependsOn: TesterInstanceProfile
 
   ### Creating ASG ###
   TesterAsg:
@@ -424,6 +425,7 @@ Resources:
       Path: '/'
       Roles:
        - !Ref TesterEc2CodeDeployRole
+    DependsOn: TesterEc2CodeDeployRole
 
   ### Creating CodeBuildProject ###
   CodeBuildRole:
