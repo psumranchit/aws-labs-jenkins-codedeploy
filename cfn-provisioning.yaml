@@ -313,7 +313,7 @@ Resources:
       Matcher:
         HttpCode: '200'
       Name: !Sub '${TesterNamingPrefix}-TG'
-      Port: 80
+      Port: 5000
       Protocol: HTTP
       TargetGroupAttributes:
       - Key: deregistration_delay.timeout_seconds
