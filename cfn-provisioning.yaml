@@ -231,11 +231,11 @@ Resources:
         - - !Ref TesterNamingPrefix
           - server
           - sg
-      GroupDescription: 'Enable HTTP access'
+      GroupDescription: 'Enable TCP port 5000 access'
       SecurityGroupIngress:
         - IpProtocol: tcp
-          FromPort: '80'
-          ToPort: '80'
+          FromPort: '5000'
+          ToPort: '5000'
           SourceSecurityGroupId: !GetAtt TesterAlbSecurityGroup.GroupId
       Tags:
         - Key: Name
@@ -288,11 +288,11 @@ Resources:
         - - !Ref TesterNamingPrefix
           - alb
           - sg
-      GroupDescription: 'Enable HTTP access'
+      GroupDescription: 'Enable TCP port 5000 access'
       SecurityGroupIngress:
         - IpProtocol: tcp
-          FromPort: '80'
-          ToPort: '80'
+          FromPort: '5000'
+          ToPort: '5000'
           CidrIp: !Ref ManagementPublicIP
       Tags:
         - Key: Name
@@ -329,7 +329,7 @@ Resources:
         - Type: forward
           TargetGroupArn: !Ref TesterTargetGroup
       LoadBalancerArn: !Ref TesterAlb
-      Port: 80
+      Port: 5000
       Protocol: HTTP
 
   ### Creating ALB ###
@@ -374,6 +374,7 @@ Resources:
               ## Install Flask
               yum install pip -y
               pip install flask
+              pip install requests
     DependsOn: TesterInstanceProfile
 
   ### Creating ASG ###
