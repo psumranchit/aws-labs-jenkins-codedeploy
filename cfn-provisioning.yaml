@@ -255,6 +255,7 @@ Resources:
       SubnetId: !Ref PublicSubnet1
       SecurityGroupIds:
         - !Ref JenkinsSecurityGroup
+      IamInstanceProfile: !Ref JenkinsInstanceProfile
       Tags:
       - Key: Name
         Value: !Join
@@ -429,6 +430,12 @@ Resources:
             - s3:GetObjectVersion
             - s3:ListBucket
             Resource: !Sub 'arn:aws:s3:::${S3CodeBuildBucket}/*'
+          - Effect: Allow
+            Action: 
+            - s3:GetObject
+            - s3:GetObjectVersion
+            - s3:ListBucket
+            Resource: !Sub 'arn:aws:s3:::aws-codedeploy-${AWS::Region}/*'
 
   TesterInstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -438,6 +445,56 @@ Resources:
       Roles:
        - !Ref TesterEc2CodeDeployRole
     DependsOn: TesterEc2CodeDeployRole
+
+  JenkinsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: '/'
+      RoleName: !Sub '${AWS::StackName}-Jenkins-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: !Sub '${AWS::StackName}-Jenkins-policy'
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action: 
+            - s3:GetObject
+            - s3:GetObjectVersion
+            - s3:PutObject
+            - s3:DeleteObject
+            Resource: !Sub 'arn:aws:s3:::${S3CodeBuildBucket}/*'
+          - Effect: Allow
+            Action: 
+            - codedeploy:ListApplications
+            - codedeploy:ListDeploymentGroups
+            - codedeploy:RegisterApplicationRevision
+            - codedeploy:CreateDeployment
+            - codedeploy:GetDeploymentConfig
+            - codedeploy:GetApplicationRevision
+            - codedeploy:GetDeployment
+            Resource: !Sub 'arn:aws:codedeploy:${AWS::Region}:${AWS::AccountId}:*:*'
+          - Effect: Allow
+            Action: 
+            - codebuild:StartBuild
+            - codebuild:BatchGetBuilds
+            - codebuild:BatchGetProjects
+            Resource: !Sub 'arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:project/${CodeBuild}'
+
+  JenkinsInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Ref JenkinsRole
+      Path: '/'
+      Roles:
+       - !Ref JenkinsRole
 
   ### Creating CodeBuildProject ###
   CodeBuildRole:
@@ -460,19 +517,25 @@ Resources:
           Statement:
           - Effect: Allow
             Action: 
-            - logs:CreateLogGroup
-            - logs:CreateLogStream
-            - logs:PutLogEvents
             - s3:PutObject
             - s3:GetObject
             - s3:GetObjectVersion
             Resource: !Sub 'arn:aws:s3:::${S3CodeBuildBucket}/*'
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*'
+          - Effect: Allow
+            Action:
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*:*'
 
   ### Creating S3 Bucket for storing CodeBuild artifacts ###
   S3CodeBuildBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub 'codebuild-${AWS::AccountId}-${AWS::Region}'
+      BucketName: !Sub '${AWS::StackName}-${AWS::AccountId}-${AWS::Region}-artifacts'
       VersioningConfiguration:
         Status: Enabled
       PublicAccessBlockConfiguration:
@@ -480,6 +543,12 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
+
+  # S3CodeBuildBucketPolicy:
+  #   Type: AWS::S3::BucketPolicy
+  #   Properties:
+  #     Bucket: !Ref S3CodeBuildBucket
+  #     PolicyDocument:
 
   ### Creating CodeBuild Project ###
   CodeBuild:
@@ -579,3 +648,11 @@ Outputs:
   CodeDeployDeploymentConfig:
     Description: 'CodeDeploy Deployment Config used for input in Jenkins project configuration'
     Value: !Ref CodeDeployConfigName
+
+  S3BucketURL:
+    Description: 'S3Bucket URL used for input in Jenkins project configuration'
+    Value: !Sub 'http://${AWS::Region}.amazonaws.com/${S3CodeBuildBucket}/codebuild-artifact.zip'
+
+  S3BucketName:
+    Description: 'S3Bucket Name used for input in Jenkins project configuration'
+    Value: !Ref S3CodeBuildBucket
