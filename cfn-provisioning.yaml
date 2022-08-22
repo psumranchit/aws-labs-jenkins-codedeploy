@@ -255,7 +255,6 @@ Resources:
       SubnetId: !Ref PublicSubnet1
       SecurityGroupIds:
         - !Ref JenkinsSecurityGroup
-      IamInstanceProfile: !Ref JenkinsInstanceProfile
       Tags:
       - Key: Name
         Value: !Join
@@ -368,10 +367,6 @@ Resources:
               aws s3 cp s3://aws-codedeploy-ap-southeast-1/latest/install .
               chmod +x ./install
               ./install auto
-              ## Install Apache
-              yum install -y httpd
-              systemctl enable httpd
-              systemctl start httpd
               ## Install Flask
               yum install pip -y
               pip install flask
@@ -446,55 +441,43 @@ Resources:
        - !Ref TesterEc2CodeDeployRole
     DependsOn: TesterEc2CodeDeployRole
 
-  JenkinsRole:
-    Type: AWS::IAM::Role
+  ### Create IAM Policy for new Jenkins User###
+  JenkinsUserPolicy:
+    Type: AWS::IAM::ManagedPolicy
     Properties:
+      ManagedPolicyName: JenkinsPolicy
       Path: '/'
-      RoleName: !Sub '${AWS::StackName}-Jenkins-role'
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
+      Description: 'Policy will be used for Jenkins Authorization to AWS'
+      PolicyDocument:
+        Version: "2012-10-17"
         Statement:
-        - Effect: Allow
-          Principal:
-            Service:
-            - ec2.amazonaws.com
-          Action: sts:AssumeRole
-      Policies:
-      - PolicyName: !Sub '${AWS::StackName}-Jenkins-policy'
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
           - Effect: Allow
-            Action: 
+            Action:
+            - logs:GetLogEvents
+            Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/${CodeBuild}:*'
+          - Effect: Allow
+            Action:
+            - s3:GetBucketVersioning
+            - s3:Put*
+            Resource: !Sub 'arn:aws:s3:::${S3CodeBuildBucket}'
+          - Effect: Allow
+            Action:
             - s3:GetObject
-            - s3:GetObjectVersion
-            - s3:PutObject
-            - s3:DeleteObject
+            - s3:Put*
             Resource: !Sub 'arn:aws:s3:::${S3CodeBuildBucket}/*'
           - Effect: Allow
-            Action: 
-            - codedeploy:ListApplications
-            - codedeploy:ListDeploymentGroups
-            - codedeploy:RegisterApplicationRevision
-            - codedeploy:CreateDeployment
-            - codedeploy:GetDeploymentConfig
-            - codedeploy:GetApplicationRevision
-            - codedeploy:GetDeployment
-            Resource: !Sub 'arn:aws:codedeploy:${AWS::Region}:${AWS::AccountId}:*:*'
-          - Effect: Allow
-            Action: 
+            Action:
             - codebuild:StartBuild
             - codebuild:BatchGetBuilds
             - codebuild:BatchGetProjects
             Resource: !Sub 'arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:project/${CodeBuild}'
-
-  JenkinsInstanceProfile:
-    Type: AWS::IAM::InstanceProfile
-    Properties:
-      InstanceProfileName: !Ref JenkinsRole
-      Path: '/'
-      Roles:
-       - !Ref JenkinsRole
+          - Effect: Allow
+            Action: 
+            - codedeploy:*
+            Resource: !Sub 'arn:aws:codedeploy:${AWS::Region}:${AWS::AccountId}:*:*'
+    DependsOn:
+      - CodeBuild
+      - S3CodeBuildBucket
 
   ### Creating CodeBuildProject ###
   CodeBuildRole:
@@ -544,11 +527,23 @@ Resources:
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
 
-  # S3CodeBuildBucketPolicy:
-  #   Type: AWS::S3::BucketPolicy
-  #   Properties:
-  #     Bucket: !Ref S3CodeBuildBucket
-  #     PolicyDocument:
+  ### Attaching policy to S3Bucket. This is required for http request plugin ###
+  S3CodeBuildBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref S3CodeBuildBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action: 
+          - s3:GetObject
+          Resource: !Sub 'arn:aws:s3:::${S3CodeBuildBucket}/*'
+          Principal: '*'
+          Condition:
+            IpAddress:
+              aws:SourceIp: !GetAtt JenkinsServer.PublicIp
+    DependsOn: JenkinsServer
 
   ### Creating CodeBuild Project ###
   CodeBuild:
@@ -591,13 +586,6 @@ Resources:
         - !Ref TesterAsg
       ServiceRoleArn: !GetAtt CodeDeployRole.Arn
       DeploymentConfigName: !Ref CodeDeployConfigName
-      # Deployment:
-      #   Revision:
-      #     RevisionType: S3
-      #     S3Location:
-      #       Bucket: !Ref S3CodeBuildBucket
-      #       BundleType: zip
-      #       Key: 'codebuild-artifact.zip'
 
     DependsOn:
       - TesterAsg
