@@ -631,7 +631,7 @@ Outputs:
 
   TesterAlbDns:
     Description: 'Tester ALB DNS'
-    Value: !GetAtt TesterAlb.DNSName
+    Value: !Sub '${TesterAlb.DNSName}:5000'
 
   CodeBuildProjectName:
     Description: 'CodeBuild Project Name used for input in Jenkins project configuration'
