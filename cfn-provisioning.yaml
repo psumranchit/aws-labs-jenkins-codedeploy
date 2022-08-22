@@ -651,7 +651,7 @@ Outputs:
 
   S3BucketURL:
     Description: 'S3Bucket URL used for input in Jenkins project configuration'
-    Value: !Sub 'http://${AWS::Region}.amazonaws.com/${S3CodeBuildBucket}/codebuild-artifact.zip'
+    Value: !Sub 'http://s3-${AWS::Region}.amazonaws.com/${S3CodeBuildBucket}/codebuild-artifact.zip'
 
   S3BucketName:
     Description: 'S3Bucket Name used for input in Jenkins project configuration'
