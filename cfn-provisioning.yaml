@@ -8,10 +8,10 @@ Parameters:
     Type: String
     Default: 'jenkins'
   
-  TesterNamingPrefix:
+  StageNamingPrefix:
     Description: Naming Prefix for Testing Environment
     Type: String
-    Default: 'tester'
+    Default: 'stage'
 
   ### EC2 parameters ###
   LatestAmiId:
@@ -33,18 +33,18 @@ Parameters:
     Description: Key Pair to access Jenkins Server
     Type: String
 
-  MinTester:
-    Description: Minimum Numbers of Tester instance
+  MinStage:
+    Description: Minimum Numbers of Stage instance
     Type: String
     Default: '1'
 
-  DesiredTester:
-    Description: Desired Numbers of Tester instance
+  DesiredStage:
+    Description: Desired Numbers of Stage instance
     Type: String
     Default: '1'
 
-  MaxTester:
-    Description: Maximum Numbers of Tester instance
+  MaxStage:
+    Description: Maximum Numbers of Stage instance
     Type: String
     Default: '1'
 
@@ -221,13 +221,13 @@ Resources:
               - server
               - sg
 
-  TesterSecurityGroup:
+  StageSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       VpcId: !Ref VPC
       GroupName: !Join
         - '-'
-        - - !Ref TesterNamingPrefix
+        - - !Ref StageNamingPrefix
           - server
           - sg
       GroupDescription: 'Enable TCP port 5000 access'
@@ -235,12 +235,12 @@ Resources:
         - IpProtocol: tcp
           FromPort: '5000'
           ToPort: '5000'
-          SourceSecurityGroupId: !GetAtt TesterAlbSecurityGroup.GroupId
+          SourceSecurityGroupId: !GetAtt StageAlbSecurityGroup.GroupId
       Tags:
         - Key: Name
           Value: !Join
             - '-'
-            - - !Ref TesterNamingPrefix
+            - - !Ref StageNamingPrefix
               - server
               - sg
 
@@ -278,13 +278,13 @@ Resources:
       - JenkinsSecurityGroup
 
   ### Creating Security Group for ALB ###
-  TesterAlbSecurityGroup:
+  StageAlbSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       VpcId: !Ref VPC
       GroupName: !Join
         - '-'
-        - - !Ref TesterNamingPrefix
+        - - !Ref StageNamingPrefix
           - alb
           - sg
       GroupDescription: 'Enable TCP port 5000 access'
@@ -297,12 +297,12 @@ Resources:
         - Key: Name
           Value: !Join
             - '-'
-            - - !Ref TesterNamingPrefix
+            - - !Ref StageNamingPrefix
               - alb
               - sg
 
   ### Creating Target Group for ALB ###
-  TesterTargetGroup:
+  StageTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
       HealthCheckIntervalSeconds: 30
@@ -311,7 +311,7 @@ Resources:
       HealthyThresholdCount: 5
       Matcher:
         HttpCode: '200'
-      Name: !Sub '${TesterNamingPrefix}-TG'
+      Name: !Sub '${StageNamingPrefix}-TG'
       Port: 5000
       Protocol: HTTP
       TargetGroupAttributes:
@@ -321,18 +321,18 @@ Resources:
       VpcId: !Ref VPC
 
   ### Creating ALB Listener ###
-  TesterAlbListener:
+  StageAlbListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
       DefaultActions:
         - Type: forward
-          TargetGroupArn: !Ref TesterTargetGroup
-      LoadBalancerArn: !Ref TesterAlb
+          TargetGroupArn: !Ref StageTargetGroup
+      LoadBalancerArn: !Ref StageAlb
       Port: 5000
       Protocol: HTTP
 
   ### Creating ALB ###
-  TesterAlb:
+  StageAlb:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
       Scheme: internet-facing
@@ -340,20 +340,20 @@ Resources:
       - !Ref PublicSubnet1
       - !Ref PublicSubnet2
       SecurityGroups:
-        - !GetAtt TesterAlbSecurityGroup.GroupId
+        - !GetAtt StageAlbSecurityGroup.GroupId
 
   ### Creating Launch Template for ASG ###
-  TesterLaunchTemplate:
+  StageLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
     Properties: 
-      LaunchTemplateName: !Sub ${TesterNamingPrefix}-lt
+      LaunchTemplateName: !Sub ${StageNamingPrefix}-lt
       LaunchTemplateData:
         ImageId: !Ref LatestAmiId
         InstanceType: !Ref InstanceType
         IamInstanceProfile:
-          Arn: !GetAtt TesterInstanceProfile.Arn
+          Arn: !GetAtt StageInstanceProfile.Arn
         SecurityGroupIds:
-          - !GetAtt TesterSecurityGroup.GroupId
+          - !GetAtt StageSecurityGroup.GroupId
         UserData:
           Fn::Base64:
             !Sub |
@@ -370,37 +370,37 @@ Resources:
               yum install pip -y
               pip install flask
               pip install requests
-    DependsOn: TesterInstanceProfile
+    DependsOn: StageInstanceProfile
 
   ### Creating ASG ###
-  TesterAsg:
+  StageAsg:
     Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
-      AutoScalingGroupName: !Sub '${TesterNamingPrefix}-asg'
+      AutoScalingGroupName: !Sub '${StageNamingPrefix}-asg'
       LaunchTemplate:
-        LaunchTemplateId: !Ref TesterLaunchTemplate
-        Version: !GetAtt TesterLaunchTemplate.LatestVersionNumber
-      MaxSize: !Ref MaxTester
-      MinSize: !Ref MinTester
-      DesiredCapacity: !Ref DesiredTester
+        LaunchTemplateId: !Ref StageLaunchTemplate
+        Version: !GetAtt StageLaunchTemplate.LatestVersionNumber
+      MaxSize: !Ref MaxStage
+      MinSize: !Ref MinStage
+      DesiredCapacity: !Ref DesiredStage
       VPCZoneIdentifier:
         - !Ref PublicSubnet1
         - !Ref PublicSubnet2
       TargetGroupARNs:
-        - !Sub 'arn:aws:elasticloadbalancing:${AWS::Region}:${AWS::AccountId}:${TesterTargetGroup.TargetGroupFullName}'
+        - !Sub 'arn:aws:elasticloadbalancing:${AWS::Region}:${AWS::AccountId}:${StageTargetGroup.TargetGroupFullName}'
       Tags:
         - Key: CodeDeploy
           Value: 'True'
           PropagateAtLaunch: True
         - Key: Name
-          Value: !Sub '${TesterNamingPrefix}-server'
+          Value: !Sub '${StageNamingPrefix}-server'
           PropagateAtLaunch: True
     DependsOn:
-      - TesterTargetGroup
-      - TesterLaunchTemplate
+      - StageTargetGroup
+      - StageLaunchTemplate
 
-  ### Creating IAM role for Tester server used by CodeDeploy ###
-  TesterEc2CodeDeployRole:
+  ### Creating IAM role for Stage server used by CodeDeploy ###
+  StageEc2CodeDeployRole:
     Type: AWS::IAM::Role
     Properties:
       Path: '/'
@@ -432,14 +432,14 @@ Resources:
             Resource: !Sub 'arn:aws:s3:::aws-codedeploy-${AWS::Region}/*'
 
   ### Creating Instance Profile for EC2 role ###
-  TesterInstanceProfile:
+  StageInstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
-      InstanceProfileName: !Ref TesterEc2CodeDeployRole
+      InstanceProfileName: !Ref StageEc2CodeDeployRole
       Path: '/'
       Roles:
-       - !Ref TesterEc2CodeDeployRole
-    DependsOn: TesterEc2CodeDeployRole
+       - !Ref StageEc2CodeDeployRole
+    DependsOn: StageEc2CodeDeployRole
 
   ### Create IAM Policy for new Jenkins User###
   JenkinsUserPolicy:
@@ -583,12 +583,12 @@ Resources:
       ApplicationName: !Ref CodeDeployApplication
       DeploymentGroupName: !Sub ${CodeDeployApplication}-deployment-group
       AutoScalingGroups:
-        - !Ref TesterAsg
+        - !Ref StageAsg
       ServiceRoleArn: !GetAtt CodeDeployRole.Arn
       DeploymentConfigName: !Ref CodeDeployConfigName
 
     DependsOn:
-      - TesterAsg
+      - StageAsg
       - CodeDeployRole
       - S3CodeBuildBucket
 
@@ -617,9 +617,9 @@ Outputs:
     Description: 'Jenkins Public IP Address'
     Value: !Sub 'http://${JenkinsServer.PublicIp}:8080'
 
-  TesterAlbDns:
-    Description: 'Tester ALB DNS'
-    Value: !Sub '${TesterAlb.DNSName}:5000'
+  StageAlbDns:
+    Description: 'Stage ALB DNS'
+    Value: !Sub '${StageAlb.DNSName}:5000'
 
   CodeBuildProjectName:
     Description: 'CodeBuild Project Name used for input in Jenkins project configuration'
