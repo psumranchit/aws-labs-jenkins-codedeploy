@@ -431,6 +431,7 @@ Resources:
             - s3:ListBucket
             Resource: !Sub 'arn:aws:s3:::aws-codedeploy-${AWS::Region}/*'
 
+  ### Creating Instance Profile for EC2 role ###
   TesterInstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
@@ -513,7 +514,7 @@ Resources:
             - logs:PutLogEvents
             Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*:*'
 
-  ### Creating S3 Bucket for storing CodeBuild artifacts ###
+  ### Creating S3 Bucket for storing CodeBuild source codes and artifacts ###
   S3CodeBuildBucket:
     Type: AWS::S3::Bucket
     Properties:
