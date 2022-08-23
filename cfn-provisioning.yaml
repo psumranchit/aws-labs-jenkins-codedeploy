@@ -518,7 +518,7 @@ Resources:
   S3CodeBuildBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub '${AWS::StackName}-${AWS::AccountId}-${AWS::Region}-artifacts'
+      BucketName: !Sub '${AWS::StackName}-${AWS::Region}-artifacts'
       VersioningConfiguration:
         Status: Enabled
       PublicAccessBlockConfiguration:
