@@ -32,7 +32,6 @@ Parameters:
   KeyPairName:
     Description: Key Pair to access Jenkins Server
     Type: String
-    Default: 'peanuts-ap-southeast-1'
 
   MinTester:
     Description: Minimum Numbers of Tester instance
@@ -68,7 +67,7 @@ Parameters:
   ManagementPublicIP:
     Description: Your Public IP Address (xx.xx.xx.xx/xx)
     Type: String
-    Default: '49.228.0.0/16'
+    Default: '0.0.0.0/0'
   
   ### CodeDeploy Parameters ###
   CodeDeployConfigName:
