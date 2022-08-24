@@ -14,8 +14,8 @@
 ## Step 2
 ### Create IAM Jenkins user for the project. 
 - Go to IAM console
-- Add new user with only **Access Key**
-- Attach **JenkinsPolicy** to the newly added user. The policy includes every permissions required for Jenkins project to interact with CodeBuild, CodeDeploy and Put/Get objects from S3 Bucket
+- Add new user with only `Access Key`
+- Attach `JenkinsPolicy` to the newly added user. The policy includes every permissions required for Jenkins project to interact with CodeBuild, CodeDeploy and Put/Get objects from S3 Bucket
 - Note down access key and secret
 
 ## Step 3
@@ -43,7 +43,7 @@ H/2 * * * *
 ~~~
 - Set Build Environment to **delete workspace before build starts**
 - Add AWS CodeBuild using `Add Build Step`
-- Provide Access Key / Secret Key noted down from **Step 2** for **Manually specify access and secret keys**
+- Provide Access Key / Secret Key noted down from **Step 2** for `Manually specify access and secret keys`
 - Project Configuration
     - Specify region
     - Get project name from CloudFormation Output tab. For example  > MyProject-build
